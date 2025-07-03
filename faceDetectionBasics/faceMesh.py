@@ -15,8 +15,8 @@ drawSpecLine = mpDraw.DrawingSpec(color=(0, 255, 0), thickness=1)
 drawSpecPoint = mpDraw.DrawingSpec(color=(0, 0, 255), circle_radius=1)
 
 pTime = 0
-# cap = cv2.VideoCapture(r"C:\Users\acer\OneDrive\Desktop\project CV\faceDetectionBasics\Videos\3.mp4")
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(r"C:\Users\acer\OneDrive\Desktop\project CV\faceDetectionBasics\Videos\3.mp4")
+# cap = cv2.VideoCapture(0)
 
 while True:
     success, img = cap.read()
@@ -27,8 +27,14 @@ while True:
     results = faceMesh.process(imgRGB)
 
     if results.multi_face_landmarks:
-        for faceLms in results.multi_face_landmarks:
-            mpDraw.draw_landmarks(img, faceLms, mpFaceMesh.FACEMESH_TESSELATION, drawSpecLine, drawSpecPoint)
+     for faceLms in results.multi_face_landmarks:
+        mpDraw.draw_landmarks(img, faceLms, mpFaceMesh.FACEMESH_TESSELATION, drawSpecLine, drawSpecPoint)
+
+        ih, iw, _ = img.shape  
+        for id, lm in enumerate(faceLms.landmark):
+            x, y = int(lm.x * iw), int(lm.y * ih)
+            print(f'Landmark {id}: (x={x}, y={y})')
+
 
     img = cv2.resize(img, (640, 480))
 
