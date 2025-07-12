@@ -1,78 +1,82 @@
 import cv2
-import dlib
+import mediapipe as mp
 import pygame
-import random
-import imutils
+import math
 import time
+import sys
 
-# Load face detector and shape predictor
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+# Initialize MediaPipe
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False)
 
-# Initialize camera
+# Initialize webcam
 cap = cv2.VideoCapture(0)
 
-# Initialize pygame
+# Initialize Pygame
 pygame.init()
 WIDTH, HEIGHT = 640, 480
 win = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Face Controlled Snake")
+pygame.display.set_caption("Face-Controlled Snake")
+clock = pygame.time.Clock()
 
-# Snake settings
+# Snake variables
 snake_pos = [100, 50]
 snake_body = [[100, 50]]
 snake_direction = 'RIGHT'
-change_to = snake_direction
 speed = 15
+game_over = False
 
-# Food settings
-food_pos = [random.randrange(1, WIDTH//10) * 10,
-            random.randrange(1, HEIGHT//10) * 10]
+# Food variables
+import random
+food_pos = [random.randrange(1, WIDTH//10)*10, random.randrange(1, HEIGHT//10)*10]
 food_spawn = True
 
-# Game settings
-clock = pygame.time.Clock()
-score = 0
+def draw_snake():
+    win.fill((0, 0, 0))
+    for pos in snake_body:
+        pygame.draw.rect(win, (0, 255, 0), pygame.Rect(pos[0], pos[1], 10, 10))
+    pygame.draw.rect(win, (255, 0, 0), pygame.Rect(food_pos[0], food_pos[1], 10, 10))
+    pygame.display.update()
 
-def game_over():
-    font = pygame.font.SysFont('times new roman', 50)
-    text = font.render(f'Game Over! Score: {score}', True, (255, 0, 0))
-    win.blit(text, [WIDTH//6, HEIGHT//3])
+def end_game():
+    font = pygame.font.SysFont('times new roman', 40)
+    text = font.render('Game Over!', True, (255, 0, 0))
+    win.blit(text, [WIDTH//3, HEIGHT//3])
     pygame.display.flip()
     time.sleep(2)
     pygame.quit()
-    quit()
+    sys.exit()
 
 while True:
+    # Read webcam frame
     ret, frame = cap.read()
-    frame = imutils.resize(frame, width=400)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    if not ret:
+        break
+    frame = cv2.flip(frame, 1)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    faces = detector(gray)
+    # Get face landmarks
+    results = face_mesh.process(rgb)
     direction = snake_direction
 
-    for face in faces:
-        landmarks = predictor(gray, face)
+    if results.multi_face_landmarks:
+        for face_landmarks in results.multi_face_landmarks:
+            nose = face_landmarks.landmark[1]  # nose tip
+            h, w, _ = frame.shape
+            x = int(nose.x * w)
+            y = int(nose.y * h)
 
-        nose = landmarks.part(30)
-        x = nose.x
-        y = nose.y
+            cx, cy = w // 2, h // 2
+            dx, dy = x - cx, y - cy
 
-        frame_center_x = frame.shape[1] // 2
-        frame_center_y = frame.shape[0] // 2
-
-        if abs(x - frame_center_x) > 25:
-            if x < frame_center_x:
-                direction = 'LEFT'
+            # Determine direction based on nose offset
+            if abs(dx) > abs(dy):
+                direction = 'LEFT' if dx < -20 else 'RIGHT' if dx > 20 else direction
             else:
-                direction = 'RIGHT'
-        elif abs(y - frame_center_y) > 25:
-            if y < frame_center_y:
-                direction = 'UP'
-            else:
-                direction = 'DOWN'
+                direction = 'UP' if dy < -20 else 'DOWN' if dy > 20 else direction
+            break
 
-    # Update snake direction
+    # Set new direction if valid
     if direction == 'UP' and not snake_direction == 'DOWN':
         snake_direction = 'UP'
     if direction == 'DOWN' and not snake_direction == 'UP':
@@ -92,47 +96,27 @@ while True:
     if snake_direction == 'RIGHT':
         snake_pos[0] += 10
 
-    # Snake body growing mechanism
     snake_body.insert(0, list(snake_pos))
     if snake_pos == food_pos:
-        score += 1
         food_spawn = False
     else:
         snake_body.pop()
 
     if not food_spawn:
-        food_pos = [random.randrange(1, WIDTH//10) * 10,
-                    random.randrange(1, HEIGHT//10) * 10]
+        food_pos = [random.randrange(1, WIDTH//10)*10, random.randrange(1, HEIGHT//10)*10]
     food_spawn = True
 
-    # Fill background
-    win.fill((0, 0, 0))
+    # Check collisions
+    if snake_pos[0] < 0 or snake_pos[0] > WIDTH-10 or \
+       snake_pos[1] < 0 or snake_pos[1] > HEIGHT-10 or \
+       snake_pos in snake_body[1:]:
+        end_game()
 
-    # Draw snake
-    for pos in snake_body:
-        pygame.draw.rect(win, (0, 255, 0), pygame.Rect(
-            pos[0], pos[1], 10, 10))
-
-    # Draw food
-    pygame.draw.rect(win, (255, 0, 0), pygame.Rect(
-        food_pos[0], food_pos[1], 10, 10))
-
-    # Game Over conditions
-    if snake_pos[0] < 0 or snake_pos[0] > WIDTH-10:
-        game_over()
-    if snake_pos[1] < 0 or snake_pos[1] > HEIGHT-10:
-        game_over()
-
-    for block in snake_body[1:]:
-        if snake_pos == block:
-            game_over()
-
-    pygame.display.update()
+    draw_snake()
     clock.tick(speed)
 
-    # Exit on pygame QUIT
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             cap.release()
             pygame.quit()
-            quit()
+            sys.exit()
